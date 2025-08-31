@@ -1,0 +1,165 @@
+
+Overview:
+
+1) Since I didnt want  a separate table for TimeEstimation, I used  @Embeddable on the TimeEstimation class and
+   @Embedded on the field in Task entity where it is embedded as field. Also I dint annotate TimeEstimation with
+   @Entity in this case as it would create table.
+
+2) Instead of creating ModelToDTOConverter utility class, libraries such as MapStruct or ModelMapper can be used, ModelMapper
+   implementation being simpler.
+    // For MapStruct create a seperate interface
+    //   @Mapper(componentModel = "spring")
+    //    public interface TaskMapper {
+    //      TaskDTO toTaskDTO(Task task);  // automatically understands what to map
+    //    }
+    //OR simply "ModelMapper" instance without any additional interface
+        //ModelMapper modelMapper = new ModelMapper();
+        //TaskDTO dto = modelMapper.map(task, TaskDTO.class);
+
+
+
+3) In Task entity, category is @ManyToOne, while checklistItems is @OneToMany. Because of this relationship, In service
+   Task expects ID's of each taskChecklistItem before setting the field List<TaskChecklistItem> taskChecklistItems. Hence
+   before the setter, taskchecklistitems are saved in repository individually.
+   While for Category, I created new instance of Category class
+
+
+4) Faced issue with foreign key constraint where taskChecklistItems were not getting saved in db even though the save method
+   on repository saveAll was called before savedChecklistItems were set in Task. THe best and shortest solution to this is to
+   cascade the taskChecklistItems field in Task entity so that Hibernate takes care of saving/deleting the child taskChecklistItems
+   when modifying/saving the parent Task , Hence I used @OneToMany(cascade=CascadeType.ALL) in the Task model.
+
+   (Not implemented)Another way was to flush the db forcefully before setting the savedTaskChecklistItems list into Task like:
+   List<TaskChecklistItem> savedChecklistItems = taskChecklistItemRepository.saveAll(taskChecklistItems);
+   taskChecklistItemRepository.flush(); // ✅ FORCE FLUSH TO DB
+   task.setTaskChecklistItems(savedTaskChecklist);
+   And also the method would require to use @Transactional
+
+5) [Important] Learning: For boolean field getter convention is .is+fieldName (Note: if 'is' is in the start of fieldname
+   it will be skipped)
+   For setter convention is  .set+fieldName(Note: if 'is' is in the start of fieldname it will be skipped)
+   Note for a solution: Use,
+   @JsonProperty("isChecked") //ensures the JSON field matches exactly and does not convert to checked by jackson due to java beans naming convention for booleans
+   private boolean isChecked;
+
+
+6) In order to avoid duplicate 'is' dropping in getter and setter issues in boolean field starting with is , i did the
+   following things to resolve :
+   Made the entity field in TaskChecklistItem as 'checked', while in entity dto I named it as 'isChecked', this way i could
+   pass 'isChecked' in json request and see output with 'isChecked' as field name but underlying the field name remained as
+   'checked'.
+
+
+7) [Key Learnings]:
+    Pagination:
+    1>Added Pagination+sorting  along with sorting for GETALL Api:
+    In service created a sort object combining query parameters sortBy and sortDirection
+    Sort sort = Sort.by(Sort.Direction.fromString(sortDirection), sortBy);
+    // Sort.Direction.fromString will throw error if invalid input is provided
+    //Sort.Direction.fromString will work fine if the input json of sortDirection is "asc" ,"desc" .If input is null,
+    in that case the controller which has default value="asc" for sortBy will pass this default value to the service, so
+    sortDirection will be "asc" in that case Sort.Direction.fromString will work perfectly fine as if input is non-null.
+
+    Note: In Postman all query parameters can be written in Params section in tabular format, same will reflect automatically
+    in url.
+
+    2>Adding filter+sort+search+ pagination in a single GET ALL api:
+    -- Ai recommends various ways to implement this as a service:
+       1) Using JPA Specification Executor ---Better for current use case
+       2) QueryDSL  --- Future , can provide better complex filtering suitable for large data sets.
+
+       Using JPA Specification Executor, current object of filteration is as follows:
+       Allow filtering by any combination of parameters like :
+       1. Task name (partial match)
+       2. Task status
+       3. Task priority
+       4. Category name or type.
+       5. Date range (createdAt/updatedAt)
+       6. Keyword search (across multiple fields)
+       7. Pagination + sorting
+
+8) Security Config-> JwtFilter -> JwtUtil(Does validation)
+
+
+
+9) Added ResponseDTO in common package as it is more clean and global.Also a modern way to write ResponseDTO (Java 17+)
+is like :
+public record ResponseDTO<T>(String message, T data) {
+    // No need to add anything here; the record automatically provides constructor, getters, equals, hashCode, and toString
+}
+
+  Description:
+ -- record in Java is a special kind of class that is immutable and automatically provides boilerplate code like
+  constructor, toString(), equals(), hashCode(), and accessors.
+  1) Java records are final and implicitly static when nested.
+  2) You can still add methods if needed (like validations or formatting methods), but for simple DTOs, this is perfectly
+  fine.
+
+
+10) Added     @JsonCreator  //Automatically tells jackson to use this method when parsing json string to enum
+              public static UserRole fromString(String role){
+                  return UserRole.valueOf(role.toUpperCase());
+              }
+
+           - that automatically parses the input string to uppercase for backend purpose
+
+
+11) @NotBlank(message="Username is required") private String username;
+
+
+    @Email(message= "Invalid email")
+    private String email;
+
+
+    @Size(min = 6, message = "Password must be at least 6 characters")
+    private String password;
+    what happens when annotations NotBlank, Email, Size etc as here are used, do they
+    atomatically throw exception when user input is wrong or not matching? do they mean so there is  no need to handle those exceptions explicitly?
+
+    Ans- These annotations trigger validation when the object is validated (e.g., in a Spring controller with `@Valid`).
+        If validation fails, Spring automatically throws a `MethodArgumentNotValidException` and returns a 400 Bad Request
+        response with validation error details. The exception is not thrown directly by the annotation, but by the validation
+        framework when it checks the object. Correct- "you do not need to handle those exceptions explicitly" in your controller
+        if you use `@Valid`(or `@Validated`) on your request DTO.
+        Spring Boot will automatically handle validation errors and return a 400 Bad Request with error details.
+        You only need to handle them explicitly if you want custom error responses or additional logic.
+        NOTE- If you do not use @Valid (or @Validated) in your controller method parameter, the validation annotations on your DTO
+            (like @NotBlank, @Email, @Size) will be ignored and validation will not be triggered automatically.
+            ie, You must use @Valid to enable automatic validation in Spring controllers.
+
+12) User Role creation:
+    By default every user created will be assigned default "USER" Role. Allowing user to pass role in request json
+    is dangerous and not recommended. Instead for ADMIN creation, admins should be created in controlled way like:
+      --1) Manual DB entry by a trusted dev/admin
+      --2) A secure internal endpoint
+      --3) via a super admin flow guarded very strictly
+
+     Manual Admin creation via DB:
+     In database tool , manually enter values for user id, name, username, email, pass(input encrypted bcrypt password manually), role('ADMIN'), etc
+            Note: For getting encrypted password, you can run custom small script ot test method using:
+                new BCryptPasswordEncoder.encode("adminPassword");
+
+
+     (Extended) Admin creation secure api could be like : POST  /admin/create  which can be only accessible via a existing admin created in db.
+                  This allows creation of admin only from elevated users/admins.
+
+
+(assignableTypes= {AuthController.class, UserController.class}) to bind specific  classes to controller advice.While
+(basePackages= {"org.example.taskpilot_taskmanager.user.controller"}) binds whole package classes directly.
+In case exception handler doesnt have required handling , it then propagates to global package's controller advice if present.
+
+
+Learning- Update Request DTOs should never set default values for any fields since DTOs fields should be allowed to be null which can be checked
+in service layer before setting value on entity record, if provided is null the field is simply to be skipped setting instead of
+setting any default value as this could change the existing value of a set field in entity to default just because the field was not provided during update request json.
+Also for boolean fields always keep the DTO field as Boolean wrapper instead of primitive boolean , as boolean if recieve null, it automatically defaults to false.
+So where should we set default values instead of null?
+-- In the entity fields, not dtos.
+could be set default using private boolean completed= false; or also add @Column(nullable=false)on top for extra protection over all dbs.
+ Similarly to avoid redundancy of setting default values, the Create DTOs should also avoid setting default values , the entities should instead
+ have default value setting, while the service class should always check if the provided field from the request dto is not null in order to set its value
+
+
+Good Practices:
+1) Add NotBlank,NotNull or Min/Max annotation in the request DTO fields not the entity fields as basic validations are
+be part of controller or dto level not service level, keeping the entity fields annotated will pass the validation during the service level initialisations.
