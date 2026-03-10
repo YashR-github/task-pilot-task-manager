@@ -19,10 +19,10 @@ import java.util.List;
  */
 public class TaskSpecification implements Specification<Task> {
 
-    private final TaskFilterRequestDTO filter;
+    private final TaskFilterRequestDTO filterDTO;
 
     public TaskSpecification(TaskFilterRequestDTO filter) {
-        this.filter = filter;
+        this.filterDTO = filter;
     }
 
     /**
@@ -39,8 +39,8 @@ public class TaskSpecification implements Specification<Task> {
         List<Predicate> predicates = new ArrayList<>();
 
         // Filter by keyword in name or description (covers name searches)
-        if (filter.getKeyword() != null && !filter.getKeyword().isBlank()) {
-            String pattern = "%" + filter.getKeyword().toLowerCase() + "%";
+        if (filterDTO.getKeyword() != null && !filterDTO.getKeyword().isBlank()) {
+            String pattern = "%" + filterDTO.getKeyword().toLowerCase() + "%";
             predicates.add(
                     cb.or(
                             cb.like(cb.lower(root.get("name")), pattern),
@@ -50,32 +50,32 @@ public class TaskSpecification implements Specification<Task> {
         }
 
         // Filter by status
-        if (filter.getTaskStatus() != null) {
-            predicates.add(cb.equal(root.get("taskStatus"), filter.getTaskStatus()));
+        if (filterDTO.getTaskStatus() != null) {
+            predicates.add(cb.equal(root.get("taskStatus"), filterDTO.getTaskStatus()));
         }
 
         // Filter by priority
-        if (filter.getTaskPriority() != null) {
-            predicates.add(cb.equal(root.get("taskPriority"), filter.getTaskPriority()));
+        if (filterDTO.getTaskPriority() != null) {
+            predicates.add(cb.equal(root.get("taskPriority"), filterDTO.getTaskPriority()));
         }
 
         // Filter by category
-        if (filter.getCategoryName() != null) {
+        if (filterDTO.getCategoryName() != null) {
             predicates.add(cb.equal(
                     cb.lower(root.get("category").get("name")),
-                    filter.getCategoryName().toLowerCase()
+                    filterDTO.getCategoryName().toLowerCase()
             ));
         }
-        if (filter.getCategoryType() != null) {
-            predicates.add(cb.equal(root.get("category").get("categoryType"), filter.getCategoryType()));
+        if (filterDTO.getCategoryType() != null) {
+            predicates.add(cb.equal(root.get("category").get("categoryType"), filterDTO.getCategoryType()));
         }
 
         // Filter by creation date range
-        if (filter.getCreatedAfter() != null) {
-            predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), filter.getCreatedAfter()));
+        if (filterDTO.getCreatedAfter() != null) {
+            predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), filterDTO.getCreatedAfter()));
         }
-        if (filter.getCreatedBefore() != null) {
-            predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), filter.getCreatedBefore()));
+        if (filterDTO.getCreatedBefore() != null) {
+            predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), filterDTO.getCreatedBefore()));
         }
 
         // Combine all predicates

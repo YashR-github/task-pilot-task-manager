@@ -26,6 +26,9 @@ Thumbs.db
 .env
 *.key
 
+### Custom Exclusions ###
+all_code.txt
+src/main/java/org/example/taskpilot_taskmanager/task/Overview
 
 # BlueJ files
 *.ctxt

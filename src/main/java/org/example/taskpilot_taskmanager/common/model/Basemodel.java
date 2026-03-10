@@ -23,8 +23,7 @@ public abstract class Basemodel {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
-
-    // for soft delete flag suggested by chatgpt
+    // for soft delete
     private boolean isDeleted;
 
 
